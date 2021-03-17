@@ -34,12 +34,18 @@ def mse_loss(targets, predictions):
   return jnp.mean(jnp.power((targets - (predictions)),2))
 
 
-@functools.partial(jax.jit, static_argnums=(8,9,10,11,12,13))
-def train(target_network, optimizer, states, actions, next_states, rewards,
-          terminals, loss_weights, cumulative_gamma, target_opt, mse_inf,tau,alpha,clip_value_min):
+@functools.partial(jax.jit, static_argnums=(0, 9,10,11,12,13, 14))
+def train(network_def, target_params, optimizer, states, actions, next_states, rewards,
+          terminals, loss_weights, cumulative_gamma, target_opt, mse_inf,tau,alpha,clip_value_min, rng):
+
+
   """Run the training step."""
-  def loss_fn(model, target, loss_multipliers):
-    q_values = jax.vmap(model, in_axes=(0))(states).q_values
+  online_params = optimizer.target
+  def loss_fn(params, rng_input, target, loss_multipliers):
+    def q_online(state):
+      return network_def.apply(params, state, rng=rng_input)
+
+    q_values = jax.vmap(q_online)(states).q_values
     q_values = jnp.squeeze(q_values)
     replay_chosen_q = jax.vmap(lambda x, y: x[y])(q_values, actions)
     
@@ -51,28 +57,32 @@ def train(target_network, optimizer, states, actions, next_states, rewards,
     mean_loss = jnp.mean(loss_multipliers * loss)
     return mean_loss, loss
 
+  rng, rng2, rng3 = jax.random.split(rng, 3)
 
-  grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+  def q_target(state):
+    return network_def.apply(target_params, state, rng=rng2)
 
   if target_opt == 0:
-    target = dqn_agent.target_q(target_network, next_states, rewards, terminals, cumulative_gamma) 
+    target = dqn_agent.target_q(q_target, next_states, rewards, terminals, cumulative_gamma) 
   elif target_opt == 1:
     #Double DQN
-    target = target_DDQN(optimizer, target_network, next_states, rewards,  terminals, cumulative_gamma)
+    target = target_DDQN(online_params, q_target, next_states, rewards,  terminals, cumulative_gamma)
+
   elif target_opt == 2:
     #Munchausen
-    target = target_m_dqn(optimizer,target_network,states,next_states,actions,rewards,terminals,
+    target = target_m_dqn(online_params, q_target, states,next_states,actions,rewards,terminals,
                 cumulative_gamma,tau,alpha,clip_value_min)
   else:
     print('error')
 
-  (mean_loss, loss), grad = grad_fn(optimizer.target, target, loss_weights)
+  grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+  (mean_loss, loss), grad = grad_fn(online_params, rng3, target, loss_weights)
   optimizer = optimizer.apply_gradient(grad)
   return optimizer, loss, mean_loss
 
 def target_DDQN(model, target_network, next_states, rewards, terminals, cumulative_gamma):
   """Compute the target Q-value. Double DQN"""
-  next_q_values = jax.vmap(model.target, in_axes=(0))(next_states).q_values
+  next_q_values = jax.vmap(model, in_axes=(0))(next_states).q_values
   next_q_values = jnp.squeeze(next_q_values)
   replay_next_qt_max = jnp.argmax(next_q_values, axis=1)
   next_q_state_values = jax.vmap(target_network, in_axes=(0))(next_states).q_values
@@ -127,10 +137,10 @@ def target_m_dqn(model, target_network, states, next_states, actions,rewards, te
   return jax.lax.stop_gradient(modified_bellman)
 
 
-@functools.partial(jax.jit, static_argnums=(3, 4, 5, 6, 7, 9, 10, 11))
-def select_action(network, state, rng, num_actions, eval_mode,
+@functools.partial(jax.jit, static_argnums=(0, 4, 5, 6, 7, 8, 10, 11, 12))
+def select_action(network_def, params, state, rng, num_actions, eval_mode,
                   epsilon_eval, epsilon_train, epsilon_decay_period,
-                  training_steps, min_replay_history, epsilon_fn,tau, model):
+                  training_steps, min_replay_history, epsilon_fn, tau, model):
 
   epsilon = jnp.where(eval_mode,
                       epsilon_eval,
@@ -139,7 +149,7 @@ def select_action(network, state, rng, num_actions, eval_mode,
                                  min_replay_history,
                                  epsilon_train))
 
-  selected_action = jnp.argmax(network(state).q_values, axis=1)[0]
+  selected_action = jnp.argmax(network_def.apply(params, state).q_values)
 
   rng, rng1, rng2 = jax.random.split(rng, num=3)
   p = jax.random.uniform(rng1)
@@ -227,7 +237,8 @@ class JaxDQNAgentNew(dqn_agent.JaxDQNAgent):
 
     super(JaxDQNAgentNew, self).__init__(
         num_actions= num_actions,
-        network=network.partial(num_actions=num_actions,
+        network= functools.partial(network, 
+                                num_actions=num_actions,
                                 net_conf=self._net_conf,
                                 env=self._env,
                                 normalize_obs=self._normalize_obs,
@@ -284,7 +295,8 @@ class JaxDQNAgentNew(dqn_agent.JaxDQNAgent):
           loss_weights = jnp.ones(self.replay_elements['state'].shape[0])
 
 
-        self.optimizer, loss, mean_loss = train(self.target_network,
+        self.optimizer, loss, mean_loss = train(self.network_def,
+                                     self.target_network_params,
                                      self.optimizer,
                                      self.replay_elements['state'],
                                      self.replay_elements['action'],
@@ -297,7 +309,8 @@ class JaxDQNAgentNew(dqn_agent.JaxDQNAgent):
                                      self._mse_inf,
                                      self._tau,
                                      self._alpha,
-                                     self._clip_value_min)
+                                     self._clip_value_min,
+                                     self._rng)
 
         if self._replay_scheme == 'prioritized':
           # Rainbow and prioritized replay are parametrized by an exponent
@@ -363,7 +376,8 @@ class JaxDQNAgentNew(dqn_agent.JaxDQNAgent):
     if not self.eval_mode:
       self._train_step()
 
-    self._rng, self.action = select_action(self.online_network,
+    self._rng, self.action = select_action(self.network_def,
+                                           self.online_params,
                                            self.state,
                                            self._rng,
                                            self.num_actions,
@@ -396,7 +410,8 @@ class JaxDQNAgentNew(dqn_agent.JaxDQNAgent):
       self._store_transition(self._last_observation, self.action, reward, False)
       self._train_step()
 
-    self._rng, self.action = select_action(self.online_network,
+    self._rng, self.action = select_action(self.network_def,
+                                           self.online_params,
                                            self.state,
                                            self._rng,
                                            self.num_actions,
@@ -411,6 +426,3 @@ class JaxDQNAgentNew(dqn_agent.JaxDQNAgent):
                                            self.optimizer)
     self.action = onp.asarray(self.action)
     return self.action
-
-
-

@@ -2,7 +2,7 @@
 
 from dopamine.discrete_domains import atari_lib
 from dopamine.discrete_domains import gym_lib
-from flax import nn
+from flax import linen as nn
 import gin
 import jax
 import jax.numpy as jnp
@@ -24,13 +24,12 @@ initializers = {"xavier_uniform": nn.initializers.xavier_uniform(),
                 "variance_scaling": jax.nn.initializers.variance_scaling(scale=1.0/jnp.sqrt(3.0),mode='fan_in',distribution='uniform')}
 #---------------------------------------------------------------------------------------------------------------------
 
-@gin.configurable
 class NoisyNetwork(nn.Module):
-  def apply(self, x, features, bias=True, kernel_init=None):
+  @nn.compact
+  def __call__(self, x, features, rng, bias=True, kernel_init=None):
     def sample_noise(shape):
 
-      seed = random.randint(0, 50)
-      noise = jax.random.normal(random.PRNGKey(seed),shape)
+      noise = jax.random.normal(rng,shape)
       return noise
     def f(x):
       return jnp.multiply(jnp.sign(x), jnp.power(jnp.abs(x), 0.5))
@@ -63,289 +62,70 @@ class NoisyNetwork(nn.Module):
 @gin.configurable
 class DQNNetwork(nn.Module):
   """Jax DQN network for Cartpole."""
+  num_actions:int
+  net_conf: str
+  env: str
+  normalize_obs:bool
+  noisy: bool
+  dueling: bool
+  initzer:str
+  hidden_layer: int
+  neurons: int
 
-  def apply(self, x, num_actions, net_conf, env, normalize_obs, noisy, dueling, initzer, hidden_layer=2, neurons=512):
-    del normalize_obs
+  @nn.compact
+  def __call__(self, x , rng ):
 
-    if net_conf == 'minatar':
+    if self.net_conf == 'minatar':
       x = x.squeeze(3)
       x = x[None, ...]
       x = x.astype(jnp.float32)
-      x = nn.Conv(x, features=16, kernel_size=(3, 3, 3), strides=(1, 1, 1),  kernel_init=initializers[initzer])
+      x = nn.Conv(x, features=16, kernel_size=(3, 3, 3), strides=(1, 1, 1),  kernel_init=initializers["variance_scaling"])
       x = jax.nn.relu(x)
       x = x.reshape((x.shape[0], -1))
 
-    elif net_conf == 'atari':
+    elif self.net_conf == 'atari':
       # We need to add a "batch dimension" as nn.Conv expects it, yet vmap will
       # have removed the true batch dimension.
       x = x[None, ...]
       x = x.astype(jnp.float32) / 255.
       x = nn.Conv(x, features=32, kernel_size=(8, 8), strides=(4, 4),
-                  kernel_init=initializers[initzer])
+                  kernel_init=initializers["variance_scaling"])
       x = jax.nn.relu(x)
       x = nn.Conv(x, features=64, kernel_size=(4, 4), strides=(2, 2),
-                  kernel_init=initializers[initzer])
+                  kernel_init=initializers["variance_scaling"])
       x = jax.nn.relu(x)
       x = nn.Conv(x, features=64, kernel_size=(3, 3), strides=(1, 1),
-                  kernel_init=initializers[initzer])
+                  kernel_init=initializers["variance_scaling"])
       x = jax.nn.relu(x)
       x = x.reshape((x.shape[0], -1))  # flatten
 
-    elif net_conf == 'classic':
+    elif self.net_conf == 'classic':
       #classic environments
       x = x[None, ...]
       x = x.astype(jnp.float32)
       x = x.reshape((x.shape[0], -1))
 
-    if env is not None and env in env_inf:
-      x = x - env_inf[env]['MIN_VALS']
-      x /= env_inf[env]['MAX_VALS'] - env_inf[env]['MIN_VALS']
+    if self.env is not None and self.env in env_inf:
+      x = x - env_inf[self.env]['MIN_VALS']
+      x /= env_inf[self.env]['MAX_VALS'] - env_inf[self.env]['MIN_VALS']
       x = 2.0 * x - 1.0
 
-    if noisy:
-      def net(x, features):
-        return NoisyNetwork(x, features)
+    if self.noisy:
+      def net(x, features, rng):
+        return NoisyNetwork(x, features, rng)
     else:
-      def net(x, features):
-        return nn.Dense(x, features, kernel_init=initializers[initzer])
+      def net(x, features, _):
+        return nn.Dense(features, kernel_init=initializers["variance_scaling"])(x)
 
-    for _ in range(hidden_layer):
-      x = net(x, features=neurons)
+    for _ in range(self.hidden_layer):
+      x = net(x, features=self.neurons rng)
       x = jax.nn.relu(x)
 
-    adv = net(x, features=num_actions)
+    adv = net(x, features=self.num_actions)
     val = net(x, features=1)
     dueling_q = val + (adv - (jnp.mean(adv, -1, keepdims=True)))
-    non_dueling_q = net(x, features=num_actions)
+    non_dueling_q = net(x, features=self.num_actions)
 
     q_values = jnp.where(dueling, dueling_q, non_dueling_q)
 
     return atari_lib.DQNNetworkType(q_values)
-
-#---------------------------------------------< RainbowDQN >----------------------------------------------------------
-
-@gin.configurable
-class RainbowDQN(nn.Module):
-
-  def apply(self, x, num_actions, net_conf, env, normalize_obs, noisy, dueling, initzer, num_atoms, support, hidden_layer=2, neurons=512):
-    del normalize_obs
-
-    if net_conf == 'minatar':
-      x = x.squeeze(3)
-      x = x[None, ...]
-      x = x.astype(jnp.float32)
-      x = nn.Conv(x, features=16, kernel_size=(3, 3, 3), strides=(1, 1, 1),  kernel_init=initializers[initzer])
-      x = jax.nn.relu(x)
-      x = x.reshape((x.shape[0], -1))
-
-    elif net_conf == 'atari':
-      # We need to add a "batch dimension" as nn.Conv expects it, yet vmap will
-      # have removed the true batch dimension.
-      x = x[None, ...]
-      x = x.astype(jnp.float32) / 255.
-      x = nn.Conv(x, features=32, kernel_size=(8, 8), strides=(4, 4),
-                  kernel_init=initializers[initzer])
-      x = jax.nn.relu(x)
-      x = nn.Conv(x, features=64, kernel_size=(4, 4), strides=(2, 2),
-                  kernel_init=initializers[initzer])
-      x = jax.nn.relu(x)
-      x = nn.Conv(x, features=64, kernel_size=(3, 3), strides=(1, 1),
-                  kernel_init=initializers[initzer])
-      x = jax.nn.relu(x)
-      x = x.reshape((x.shape[0], -1))  # flatten
-
-    elif net_conf == 'classic':
-      #classic environments
-      x = x[None, ...]
-      x = x.astype(jnp.float32)
-      x = x.reshape((x.shape[0], -1))
-
-
-    if env is not None and env in env_inf:
-      x = x - env_inf[env]['MIN_VALS']
-      x /= env_inf[env]['MAX_VALS'] - env_inf[env]['MIN_VALS']
-      x = 2.0 * x - 1.0
-
-
-    if noisy:
-      def net(x, features):
-        return NoisyNetwork(x, features)
-    else:
-      def net(x, features):
-        return nn.Dense(x, features, kernel_init=initializers[initzer])
-
-
-    for _ in range(hidden_layer):
-      x = net(x, features=neurons)
-      x = jax.nn.relu(x)
-
-
-    if dueling:
-      adv = net(x,features=num_actions * num_atoms)
-      value = net(x, features=num_atoms)
-      adv = adv.reshape((adv.shape[0], num_actions, num_atoms))
-      value = value.reshape((value.shape[0], 1, num_atoms))
-      logits = value + (adv - (jnp.mean(adv, -2, keepdims=True)))
-      probabilities = nn.softmax(logits)
-      q_values = jnp.sum(support * probabilities, axis=2)
-
-    else:
-      x = net(x, features=num_actions * num_atoms)
-      logits = x.reshape((x.shape[0], num_actions, num_atoms))
-      probabilities = nn.softmax(logits)
-      q_values = jnp.sum(support * probabilities, axis=2)
-
-    return atari_lib.RainbowNetworkType(q_values, logits, probabilities)
-    
-#---------------------------------------------< QuantileNetwork >----------------------------------------------------------
-
-@gin.configurable
-class QuantileNetwork(nn.Module):
-  """Convolutional network used to compute the agent's return quantiles."""
-
-  def apply(self, x, num_actions, net_conf, env, normalize_obs, noisy, dueling, initzer, num_atoms,hidden_layer=2, neurons=512):
-    del normalize_obs
-
-    if net_conf == 'minatar':
-      x = x.squeeze(3)
-      x = x[None, ...]
-      x = x.astype(jnp.float32)
-      x = nn.Conv(x, features=16, kernel_size=(3, 3, 3), strides=(1, 1, 1), kernel_init=initializers[initzer])
-      x = jax.nn.relu(x)
-      x = x.reshape((x.shape[0], -1))
-
-    elif net_conf == 'atari':
-      # We need to add a "batch dimension" as nn.Conv expects it, yet vmap will
-      # have removed the true batch dimension.
-      x = x[None, ...]
-      x = x.astype(jnp.float32) / 255.
-      x = nn.Conv(x, features=32, kernel_size=(8, 8), strides=(4, 4),
-                  kernel_init=initializers[initzer])
-      x = jax.nn.relu(x)
-      x = nn.Conv(x, features=64, kernel_size=(4, 4), strides=(2, 2),
-                  kernel_init=initializers[initzer])
-      x = jax.nn.relu(x)
-      x = nn.Conv(x, features=64, kernel_size=(3, 3), strides=(1, 1),
-                  kernel_init=initializers[initzer])
-      x = jax.nn.relu(x)
-      x = x.reshape((x.shape[0], -1))  # flatten
-
-    elif net_conf == 'classic':
-      #classic environments
-      x = x[None, ...]
-      x = x.astype(jnp.float32)
-      x = x.reshape((x.shape[0], -1))
-
-
-    if env is not None and env in env_inf:
-      x = x - env_inf[env]['MIN_VALS']
-      x /= env_inf[env]['MAX_VALS'] - env_inf[env]['MIN_VALS']
-      x = 2.0 * x - 1.0
-
-
-    if noisy:
-      def net(x, features):
-        return NoisyNetwork(x, features)
-    else:
-      def net(x, features):
-        return nn.Dense(x, features, kernel_init=initializers[initzer])
-
-
-    for _ in range(hidden_layer):
-      x = net(x, features=neurons)
-      x = jax.nn.relu(x)
-
-    if dueling:
-      adv = net(x,features=num_actions * num_atoms)
-      value = net(x, features=num_atoms)
-      adv = adv.reshape((adv.shape[0], num_actions, num_atoms))
-      value = value.reshape((value.shape[0], 1, num_atoms))
-      logits = value + (adv - (jnp.mean(adv, -2, keepdims=True)))
-      probabilities = nn.softmax(logits)
-      q_values = jnp.mean(logits, axis=2)
-
-    else:
-      x = net(x, features=num_actions * num_atoms)
-      logits = x.reshape((x.shape[0], num_actions, num_atoms))
-      probabilities = nn.softmax(logits)
-      q_values = jnp.mean(logits, axis=2)
-
-
-    return atari_lib.RainbowNetworkType(q_values, logits, probabilities)
-
-#---------------------------------------------< IQ-Network >----------------------------------------------------------
-@gin.configurable
-class ImplicitQuantileNetwork(nn.Module):
-  """Jax DQN network for Cartpole."""
-     
-  def apply(self, x, num_actions, net_conf, env, hidden_layer, neurons, noisy, dueling, initzer, quantile_embedding_dim, num_quantiles, rng):
-  
-    if net_conf == 'minatar':
-      x = x.squeeze(3)
-      x = x[None, ...]
-      x = x.astype(jnp.float32)
-      x = nn.Conv(x, features=16, kernel_size=(3, 3, 3), strides=(1, 1, 1),  kernel_init=initializers[initzer])
-      x = jax.nn.relu(x)
-      x = x.reshape((x.shape[0], -1))
-
-    elif net_conf == 'atari':
-      # We need to add a "batch dimension" as nn.Conv expects it, yet vmap will
-      # have removed the true batch dimension.
-      x = x[None, ...]
-      x = x.astype(jnp.float32) / 255.
-      x = nn.Conv(x, features=32, kernel_size=(8, 8), strides=(4, 4),
-                  kernel_init=initializers[initzer])
-      x = jax.nn.relu(x)
-      x = nn.Conv(x, features=64, kernel_size=(4, 4), strides=(2, 2),
-                  kernel_init=initializers[initzer])
-      x = jax.nn.relu(x)
-      x = nn.Conv(x, features=64, kernel_size=(3, 3), strides=(1, 1),
-                  kernel_init=initializers[initzer])
-      x = jax.nn.relu(x)
-      x = x.reshape((x.shape[0], -1))  # flatten
-
-    elif net_conf == 'classic':
-      #classic environments
-      x = x[None, ...]
-      x = x.astype(jnp.float32)
-      x = x.reshape((x.shape[0], -1))
-
-    if env is not None and env in env_inf:
-      x = x - env_inf[env]['MIN_VALS']
-      x /= env_inf[env]['MAX_VALS'] - env_inf[env]['MIN_VALS']
-      x = 2.0 * x - 1.0
-
-    if noisy:
-      def net(x, features):
-        return NoisyNetwork(x, features)
-    else:
-      def net(x, features):
-        return nn.Dense(x, features,kernel_init=initializers[initzer])
-
-    for _ in range(hidden_layer):
-      x = net(x, features=neurons)
-      x = jax.nn.relu(x)
-
-    state_vector_length = x.shape[-1]
-    state_net_tiled = jnp.tile(x, [num_quantiles, 1])
-    quantiles_shape = [num_quantiles, 1]
-    quantiles = jax.random.uniform(rng, shape=quantiles_shape)
-    quantile_net = jnp.tile(quantiles, [1, quantile_embedding_dim])
-    quantile_net = (
-        jnp.arange(1, quantile_embedding_dim + 1, 1).astype(jnp.float32)
-        * onp.pi
-        * quantile_net)
-    quantile_net = jnp.cos(quantile_net)
-    quantile_net = nn.Dense(quantile_net,
-                            features=state_vector_length,
-                            kernel_init=initializers[initzer])
-    quantile_net = jax.nn.relu(quantile_net)
-    x = state_net_tiled * quantile_net
-    
-    adv = net(x,features=num_actions)
-    val = net(x, features=1)
-    dueling_q = val + (adv - (jnp.mean(adv, -1, keepdims=True)))
-    non_dueling_q = net(x, features=num_actions)
-    quantile_values = jnp.where(dueling, dueling_q, non_dueling_q)
-
-    return atari_lib.ImplicitQuantileNetworkType(quantile_values, quantiles)
