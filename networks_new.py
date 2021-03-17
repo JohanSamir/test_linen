@@ -79,7 +79,7 @@ class DQNNetwork(nn.Module):
       x = x.squeeze(3)
       x = x[None, ...]
       x = x.astype(jnp.float32)
-      x = nn.Conv(x, features=16, kernel_size=(3, 3, 3), strides=(1, 1, 1),  kernel_init=initializers["variance_scaling"])
+      x = nn.Conv(features=16, kernel_size=(3, 3, 3), strides=(1, 1, 1),  kernel_init=initializers["variance_scaling"])(x)
       x = jax.nn.relu(x)
       x = x.reshape((x.shape[0], -1))
 
@@ -88,14 +88,14 @@ class DQNNetwork(nn.Module):
       # have removed the true batch dimension.
       x = x[None, ...]
       x = x.astype(jnp.float32) / 255.
-      x = nn.Conv(x, features=32, kernel_size=(8, 8), strides=(4, 4),
-                  kernel_init=initializers["variance_scaling"])
+      x = nn.Conv(features=32, kernel_size=(8, 8), strides=(4, 4),
+                  kernel_init=initializers["variance_scaling"])(x)
       x = jax.nn.relu(x)
-      x = nn.Conv(x, features=64, kernel_size=(4, 4), strides=(2, 2),
-                  kernel_init=initializers["variance_scaling"])
+      x = nn.Conv(features=64, kernel_size=(4, 4), strides=(2, 2),
+                  kernel_init=initializers["variance_scaling"])(x)
       x = jax.nn.relu(x)
-      x = nn.Conv(x, features=64, kernel_size=(3, 3), strides=(1, 1),
-                  kernel_init=initializers["variance_scaling"])
+      x = nn.Conv(features=64, kernel_size=(3, 3), strides=(1, 1),
+                  kernel_init=initializers["variance_scaling"])(x)
       x = jax.nn.relu(x)
       x = x.reshape((x.shape[0], -1))  # flatten
 
@@ -118,7 +118,7 @@ class DQNNetwork(nn.Module):
         return nn.Dense(features, kernel_init=initializers["variance_scaling"])(x)
 
     for _ in range(self.hidden_layer):
-      x = net(x, features=self.neurons rng)
+      x = net(x, features=self.neurons, rng=rng)
       x = jax.nn.relu(x)
 
     adv = net(x, features=self.num_actions)
