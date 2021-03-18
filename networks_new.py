@@ -25,14 +25,12 @@ initializers = {"xavier_uniform": nn.initializers.xavier_uniform(),
 #---------------------------------------------------------------------------------------------------------------------
 
 class NoisyNetwork(nn.Module):
-  features: float
+  features: int
   rng: int
   bias_in: bool
 
   @nn.compact
   def __call__(self, x):
-  #def __call__(self, x, features, rng, bias=True):
-    #bias=True
 
     def sample_noise(rng_input, shape):
       noise = jax.random.normal(rng_input,shape)
@@ -47,20 +45,20 @@ class NoisyNetwork(nn.Module):
         high = 1*1/jnp.power(x.shape[1], 0.5)
         return jax.random.uniform(rng, shape=shape, minval=low, maxval=high)
 
-    def sigma_init(key, shape, dtype=jnp.float32): return jnp.ones(shape, dtype)*(0.1 / onp.sqrt(x.shape[1]))
+    def sigma_init(key, shape, dtype=jnp.float32): return jnp.ones(shape, dtype)*(0.1 / jnp.sqrt(x.shape[1]))
 
-    rng, rng2, rng3, rgn4, rgn5 = jax.random.split(self.rng, 5)
+    rng, rng2, rng3, rng4, rng5 = jax.random.split(self.rng, 5)
     # Sample noise from gaussian
     p = sample_noise(rng2,[x.shape[1], 1])
     q = sample_noise(rng3,[1, self.features])
     f_p = f(p); f_q = f(q)
     w_epsilon = f_p*f_q; b_epsilon = jnp.squeeze(f_q)
-    w_mu = self.param('kernel', mu_init, (x.shape[1], self.features), rgn4)
+    w_mu = self.param('kernel', mu_init, (x.shape[1], self.features), rng3)
     w_sigma = self.param('kernell', sigma_init, (x.shape[1], self.features))
     w = w_mu + jnp.multiply(w_sigma, w_epsilon)
     ret = jnp.matmul(x, w)
 
-    b_mu = self.param('bias', mu_init, (self.features,), rgn5)
+    b_mu = self.param('bias', mu_init, (self.features,), rng5)
     b_sigma = self.param('biass',sigma_init, (self.features,))
     b = b_mu + jnp.multiply(b_sigma, b_epsilon)
     return jnp.where(self.bias_in, ret + b, ret)
@@ -120,11 +118,7 @@ class DQNNetwork(nn.Module):
 
     if self.noisy:
       def net(x, features, rng):
-        rng, rng2, rgn3 = jax.random.split(rng, 3)
-        model = NoisyNetwork(features, rng=rgn3, bias_in=True)
-        params = model.init(rng2, x)
-        return model.apply(params, x)
-
+        return NoisyNetwork(features, rng=rng, bias_in=True)(x)
     else:
       def net(x, features, rng):
         return nn.Dense(features, kernel_init=initializers["variance_scaling"])(x)
