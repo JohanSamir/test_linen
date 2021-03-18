@@ -20,15 +20,8 @@ env_inf = {"CartPole":{"MIN_VALS": onp.array([-2.4, -5., -math.pi/12., -math.pi*
             "MountainCar":{"MIN_VALS":onp.array([-1.2, -0.07]),"MAX_VALS": onp.array([0.6, 0.07])}
             }
 
-@gin.configurable
-def variance_scaling_init(type=0, scale=None, mode=None, distribution=None):
-    if type == 0:
-        return jax.nn.initializers.zeros
-    elif type == 1:
-        return jax.nn.initializers.ones
-    else:
-        return jax.nn.initializers.variance_scaling(scale, mode, distribution)
-
+initializers = {"xavier_uniform": nn.initializers.xavier_uniform(), 
+                "variance_scaling": jax.nn.initializers.variance_scaling(scale=1.0/jnp.sqrt(3.0),mode='fan_in',distribution='uniform')}
 #---------------------------------------------------------------------------------------------------------------------
 
 class NoisyNetwork(nn.Module):
@@ -92,7 +85,7 @@ class DQNNetwork(nn.Module):
       x = x.squeeze(3)
       x = x[None, ...]
       x = x.astype(jnp.float32)
-      x = nn.Conv(features=16, kernel_size=(3, 3, 3), strides=(1, 1, 1),  kernel_init=self.initzer)(x)
+      x = nn.Conv(features=16, kernel_size=(3, 3, 3), strides=(1, 1, 1),  kernel_init=initializers["variance_scaling"])(x)
       x = jax.nn.relu(x)
       x = x.reshape((x.shape[0], -1))
 
@@ -102,13 +95,13 @@ class DQNNetwork(nn.Module):
       x = x[None, ...]
       x = x.astype(jnp.float32) / 255.
       x = nn.Conv(features=32, kernel_size=(8, 8), strides=(4, 4),
-                  kernel_init=self.initzer)(x)
+                  kernel_init=initializers["variance_scaling"])(x)
       x = jax.nn.relu(x)
       x = nn.Conv(features=64, kernel_size=(4, 4), strides=(2, 2),
-                  kernel_init=self.initzer)(x)
+                  kernel_init=initializers["variance_scaling"])(x)
       x = jax.nn.relu(x)
       x = nn.Conv(features=64, kernel_size=(3, 3), strides=(1, 1),
-                  kernel_init=self.initzer)(x)
+                  kernel_init=initializers["variance_scaling"])(x)
       x = jax.nn.relu(x)
       x = x.reshape((x.shape[0], -1))  # flatten
 
@@ -128,7 +121,7 @@ class DQNNetwork(nn.Module):
         return NoisyNetwork(features, rng=rng, bias_in=True)(x)
     else:
       def net(x, features, rng):
-        return nn.Dense(features, kernel_init=self.initzer)(x)
+        return nn.Dense(features, kernel_init=initializers["variance_scaling"])(x)
 
     for _ in range(self.hidden_layer):
       x = net(x, features=self.neurons, rng=rng)
