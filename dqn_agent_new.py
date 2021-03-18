@@ -18,6 +18,8 @@ Details in:
 "Munchausen Reinforcement Learning" by Vieillard et al. (2020).
 
 """
+import time
+import copy
 import functools
 from dopamine.jax import networks
 from dopamine.jax.agents.dqn import dqn_agent
@@ -57,20 +59,23 @@ def train(network_def, target_params, optimizer, states, actions, next_states, r
     mean_loss = jnp.mean(loss_multipliers * loss)
     return mean_loss, loss
 
-  rng, rng2, rng3 = jax.random.split(rng, 3)
+  rng, rng2, rng3, rng4  = jax.random.split(rng, 4)
 
   def q_target(state):
     return network_def.apply(target_params, state, rng=rng2)
+
+  def q_target_online(state):
+    return network_def.apply(online_params, state, rng=rng4)
 
   if target_opt == 0:
     target = dqn_agent.target_q(q_target, next_states, rewards, terminals, cumulative_gamma) 
   elif target_opt == 1:
     #Double DQN
-    target = target_DDQN(online_params, q_target, next_states, rewards,  terminals, cumulative_gamma)
+    target = target_DDQN(q_target_online, q_target, next_states, rewards,  terminals, cumulative_gamma)
 
   elif target_opt == 2:
     #Munchausen
-    target = target_m_dqn(online_params, q_target, states,next_states,actions,rewards,terminals,
+    target = target_m_dqn(q_target_online, q_target, states,next_states,actions,rewards,terminals,
                 cumulative_gamma,tau,alpha,clip_value_min)
   else:
     print('error')
@@ -148,10 +153,9 @@ def select_action(network_def, params, state, rng, num_actions, eval_mode,
                                  training_steps,
                                  min_replay_history,
                                  epsilon_train))
-
-  selected_action = jnp.argmax(network_def.apply(params, state).q_values)
-
-  rng, rng1, rng2 = jax.random.split(rng, num=3)
+  
+  rng, rng1, rng2, rng3 = jax.random.split(rng, num=4)
+  selected_action = jnp.argmax(network_def.apply(params, state, rng=rng3).q_values)  
   p = jax.random.uniform(rng1)
   return rng, jnp.where(p <= epsilon,
                         jax.random.randint(rng2, (), 0, num_actions),
@@ -181,7 +185,8 @@ class JaxDQNAgentNew(dqn_agent.JaxDQNAgent):
                mse_inf=False,
                network=networks.NatureDQNNetwork,
                optimizer='adam',
-               epsilon_fn=dqn_agent.linearly_decaying_epsilon):
+               epsilon_fn=dqn_agent.linearly_decaying_epsilon,
+               seed=None):
     """Initializes the agent and constructs the necessary components.
 
     Args:
@@ -220,7 +225,7 @@ class JaxDQNAgentNew(dqn_agent.JaxDQNAgent):
         (for instance, only the network parameters).
     """
     # We need this because some tools convert round floats into ints.
-
+    seed = int(time.time() * 1e6) if seed is None else seed
     self._net_conf = net_conf
     self._env = env 
     self._normalize_obs = normalize_obs
@@ -234,6 +239,7 @@ class JaxDQNAgentNew(dqn_agent.JaxDQNAgent):
     self._tau = tau
     self._alpha = alpha
     self._clip_value_min = clip_value_min
+    self._rng = jax.random.PRNGKey(seed)
 
     super(JaxDQNAgentNew, self).__init__(
         num_actions= num_actions,
@@ -250,11 +256,21 @@ class JaxDQNAgentNew(dqn_agent.JaxDQNAgent):
         optimizer=optimizer,
         epsilon_fn=dqn_agent.identity_epsilon if self._noisy == True else epsilon_fn)
 
+    
     self._replay_scheme = replay_scheme
     state_shape = self.observation_shape + (self.stack_size,)
     self.state = onp.zeros(state_shape)
     self._optimizer_name = optimizer
     self._build_networks_and_optimizer()
+
+
+  def _build_networks_and_optimizer(self):
+    self._rng, rng = jax.random.split(self._rng)
+    online_network_params = self.network_def.init(
+        rng, x=self.state,  rng=self._rng)
+    optimizer_def = dqn_agent.create_optimizer(self._optimizer_name)
+    self.optimizer = optimizer_def.create(online_network_params)
+    self.target_network_params = copy.deepcopy(online_network_params)
 
 
   def _build_replay_buffer(self):

@@ -25,37 +25,45 @@ initializers = {"xavier_uniform": nn.initializers.xavier_uniform(),
 #---------------------------------------------------------------------------------------------------------------------
 
 class NoisyNetwork(nn.Module):
-  @nn.compact
-  def __call__(self, x, features, rng, bias=True, kernel_init=None):
-    def sample_noise(shape):
+  features: float
+  rng: int
+  bias_in: bool
 
-      noise = jax.random.normal(rng,shape)
+  @nn.compact
+  def __call__(self, x):
+  #def __call__(self, x, features, rng, bias=True):
+    #bias=True
+
+    def sample_noise(rng_input, shape):
+      noise = jax.random.normal(rng_input,shape)
       return noise
+
     def f(x):
       return jnp.multiply(jnp.sign(x), jnp.power(jnp.abs(x), 0.5))
     # Initializer of \mu and \sigma 
    
-    def mu_init(key, shape):
+    def mu_init(key, shape, rng):
         low = -1*1/jnp.power(x.shape[1], 0.5)
         high = 1*1/jnp.power(x.shape[1], 0.5)
-        return onp.random.uniform(low,high,shape)
+        return jax.random.uniform(rng, shape=shape, minval=low, maxval=high)
 
     def sigma_init(key, shape, dtype=jnp.float32): return jnp.ones(shape, dtype)*(0.1 / onp.sqrt(x.shape[1]))
 
+    rng, rng2, rng3, rgn4, rgn5 = jax.random.split(self.rng, 5)
     # Sample noise from gaussian
-    p = sample_noise([x.shape[1], 1])
-    q = sample_noise([1, features])
+    p = sample_noise(rng2,[x.shape[1], 1])
+    q = sample_noise(rng3,[1, self.features])
     f_p = f(p); f_q = f(q)
     w_epsilon = f_p*f_q; b_epsilon = jnp.squeeze(f_q)
-    w_mu = self.param('kernel',(x.shape[1], features), mu_init)
-    w_sigma = self.param('kernell',(x.shape[1], features),sigma_init)
+    w_mu = self.param('kernel', mu_init, (x.shape[1], self.features), rgn4)
+    w_sigma = self.param('kernell', sigma_init, (x.shape[1], self.features))
     w = w_mu + jnp.multiply(w_sigma, w_epsilon)
     ret = jnp.matmul(x, w)
 
-    b_mu = self.param('bias',(features,),mu_init)
-    b_sigma = self.param('biass',(features,),sigma_init)
+    b_mu = self.param('bias', mu_init, (self.features,), rgn5)
+    b_sigma = self.param('biass',sigma_init, (self.features,))
     b = b_mu + jnp.multiply(b_sigma, b_epsilon)
-    return jnp.where(bias, ret + b, ret)
+    return jnp.where(self.bias_in, ret + b, ret)
   
 #---------------------------------------------< DQNNetwork >----------------------------------------------------------
 
@@ -73,7 +81,7 @@ class DQNNetwork(nn.Module):
   neurons: int
 
   @nn.compact
-  def __call__(self, x , rng ):
+  def __call__(self, x , rng):
 
     if self.net_conf == 'minatar':
       x = x.squeeze(3)
@@ -112,20 +120,24 @@ class DQNNetwork(nn.Module):
 
     if self.noisy:
       def net(x, features, rng):
-        return NoisyNetwork(x, features, rng)
+        rng, rng2, rgn3 = jax.random.split(rng, 3)
+        model = NoisyNetwork(features, rng=rgn3, bias_in=True)
+        params = model.init(rng2, x)
+        return model.apply(params, x)
+
     else:
-      def net(x, features, _):
+      def net(x, features, rng):
         return nn.Dense(features, kernel_init=initializers["variance_scaling"])(x)
 
     for _ in range(self.hidden_layer):
       x = net(x, features=self.neurons, rng=rng)
       x = jax.nn.relu(x)
 
-    adv = net(x, features=self.num_actions)
-    val = net(x, features=1)
+    adv = net(x, features=self.num_actions, rng=rng)
+    val = net(x, features=1, rng=rng)
     dueling_q = val + (adv - (jnp.mean(adv, -1, keepdims=True)))
-    non_dueling_q = net(x, features=self.num_actions)
+    non_dueling_q = net(x, features=self.num_actions, rng=rng)
 
-    q_values = jnp.where(dueling, dueling_q, non_dueling_q)
+    q_values = jnp.where(self.dueling, dueling_q, non_dueling_q)
 
     return atari_lib.DQNNetworkType(q_values)
