@@ -12,7 +12,7 @@ Specifically, we implement the following components from Rainbow:
 Details in "Rainbow: Combining Improvements in Deep Reinforcement Learning" by
 Hessel et al. (2018).
 """
-
+import time
 import copy
 import functools
 from dopamine.jax import networks
@@ -30,9 +30,9 @@ def train(network_def, target_params, optimizer, states, actions, next_states, r
           terminals, loss_weights, support, cumulative_gamma, double_dqn, rng):
   """Run a training step."""
   online_params = optimizer.target
-  def loss_fn(params, target, loss_multipliers):
+  def loss_fn(params, rng_input, target, loss_multipliers):
     def q_online(state):
-      return network_def.apply(params, state, support)
+      return network_def.apply(params, state, support, rng=rng_input)
 
     logits = jax.vmap(q_online)(states).logits
     # Fetch the logits for its selected action. We use vmap to perform this
@@ -48,7 +48,7 @@ def train(network_def, target_params, optimizer, states, actions, next_states, r
     return network_def.apply(target_params, state, support, rng=rng2)
 
   def q_target_online(state):
-    return network_def.apply(online_params, state, rng=rng4)
+    return network_def.apply(online_params, state, support, rng=rng4)
 
   if double_dqn:
     target = target_distributionDouble(q_target_online, q_target, next_states, rewards,  terminals, support, cumulative_gamma)
@@ -110,12 +110,12 @@ def select_action(network_def, params, state, rng, num_actions, eval_mode,
                                  min_replay_history,
                                  epsilon_train))
 
-  rng, rng1, rng2 = jax.random.split(rng, num=3)
+  rng, rng1, rng2 , rng3 = jax.random.split(rng, num=4)
   p = jax.random.uniform(rng1)
   return rng, jnp.where(
       p <= epsilon,
       jax.random.randint(rng2, (), 0, num_actions),
-      jnp.argmax(network_def.apply(params, state, support).q_values))
+      jnp.argmax(network_def.apply(params, state, support, rng=rng3).q_values))
 
 @gin.configurable
 class JaxRainbowAgentNew(dqn_agent.JaxDQNAgent):
@@ -211,11 +211,10 @@ class JaxRainbowAgentNew(dqn_agent.JaxDQNAgent):
         epsilon_fn = dqn_agent.identity_epsilon if self._noisy == True else epsilon_fn,
         optimizer=optimizer)
 
- def _build_networks_and_optimizer(self):
+  def _build_networks_and_optimizer(self):
     self._rng, rng = jax.random.split(self._rng)
     online_network_params = self.network_def.init(rng, x=self.state,
-                                                  support=self._support, 
-                                                  rng=self._rng)
+                                                  support=self._support, rng=self._rng)
     optimizer_def = dqn_agent.create_optimizer(self._optimizer_name)
     self.optimizer = optimizer_def.create(online_network_params)
     self.target_network_params = copy.deepcopy(online_network_params)
