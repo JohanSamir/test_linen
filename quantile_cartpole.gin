@@ -24,9 +24,9 @@ JaxQuantileAgentNew.env = 'CartPole'
 JaxQuantileAgentNew.normalize_obs = True
 JaxQuantileAgentNew.hidden_layer = 2
 JaxQuantileAgentNew.neurons = 512
-JaxQuantileAgentNew.double_dqn = False
-JaxQuantileAgentNew.noisy = False
-JaxQuantileAgentNew.dueling = False
+JaxQuantileAgentNew.double_dqn = True
+JaxQuantileAgentNew.noisy = True
+JaxQuantileAgentNew.dueling = True
 JaxQuantileAgentNew.initzer = @networks_new.variance_scaling_init()
 networks_new.variance_scaling_init.type=2
 networks_new.variance_scaling_init.scale=0.8
@@ -34,7 +34,7 @@ networks_new.variance_scaling_init.mode='fan_in'
 networks_new.variance_scaling_init.distribution='uniform'
 
 
-JaxQuantileAgentNew.replay_scheme = 'uniform' #'prioritized'
+JaxQuantileAgentNew.replay_scheme = 'prioritized' #'prioritized'
 JaxQuantileAgentNew.network  = @networks_new.QuantileNetwork 
 JaxQuantileAgentNew.epsilon_fn = @dqn_agent.identity_epsilon
 

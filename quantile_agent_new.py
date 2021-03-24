@@ -18,10 +18,10 @@ import functools
 from dopamine.jax import networks
 from dopamine.jax.agents.dqn import dqn_agent
 from dopamine.replay_memory import prioritized_replay_buffer #check
-from flax import nn #check
 import gin
 import jax
 import jax.numpy as jnp
+import numpy as onp
 import tensorflow as tf
 
 
@@ -121,7 +121,7 @@ def train(network_def, target_params, optimizer, states, actions, next_states, r
     return network_def.apply(target_params, state, rng=rng2)
 
   def q_target_online(state):
-    return network_def.apply(online_params, state, support, rng=rng4)
+    return network_def.apply(online_params, state, rng=rng4)
 
   if double_dqn:
     target = target_distributionDouble(q_target_online, q_target, next_states, rewards,  terminals, cumulative_gamma)
@@ -133,11 +133,10 @@ def train(network_def, target_params, optimizer, states, actions, next_states, r
   optimizer = optimizer.apply_gradient(grad)
   return optimizer, loss, mean_loss
 
-#CHECK
-@functools.partial(jax.jit, static_argnums=(0, 4, 5, 6, 7, 8, 10, 11, 12))
+@functools.partial(jax.jit, static_argnums=(0, 4, 5, 6, 7, 8, 10, 11))
 def select_action(network_def, params, state, rng, num_actions, eval_mode,
                   epsilon_eval, epsilon_train, epsilon_decay_period,
-                  training_steps, min_replay_history, epsilon_fn, tau, model):
+                  training_steps, min_replay_history, epsilon_fn):
 
   epsilon = jnp.where(eval_mode,
                       epsilon_eval,
@@ -266,7 +265,6 @@ class JaxQuantileAgentNew(dqn_agent.JaxDQNAgent):
         gamma=self.gamma,
         observation_dtype=self.observation_dtype)
 
-
   def begin_episode(self, observation):
 
     self._reset_state()
@@ -279,6 +277,7 @@ class JaxQuantileAgentNew(dqn_agent.JaxDQNAgent):
                                            self.online_params,
                                            self.state,
                                            self._rng,
+                                           self.num_quantile_samples,
                                            self.num_actions,
                                            self.eval_mode,
                                            self.epsilon_eval,
@@ -286,13 +285,12 @@ class JaxQuantileAgentNew(dqn_agent.JaxDQNAgent):
                                            self.epsilon_decay_period,
                                            self.training_steps,
                                            self.min_replay_history,
-                                           self.epsilon_fn,
-                                           self._support)
-    # TODO(psc): Why a numpy array? Why not an int?
+                                           self.epsilon_fn)
     self.action = onp.asarray(self.action)
     return self.action
 
   def step(self, reward, observation):
+    
     self._last_observation = self._observation
     self._record_observation(observation)
 
@@ -304,6 +302,7 @@ class JaxQuantileAgentNew(dqn_agent.JaxDQNAgent):
                                            self.online_params,
                                            self.state,
                                            self._rng,
+                                           self.num_quantile_samples,
                                            self.num_actions,
                                            self.eval_mode,
                                            self.epsilon_eval,
@@ -311,9 +310,10 @@ class JaxQuantileAgentNew(dqn_agent.JaxDQNAgent):
                                            self.epsilon_decay_period,
                                            self.training_steps,
                                            self.min_replay_history,
-                                           self.epsilon_fn,
-                                           self._support)
+                                           self.epsilon_fn)
     self.action = onp.asarray(self.action)
+    return self.action
+
 
   def _train_step(self):
     """Runs a single training step.

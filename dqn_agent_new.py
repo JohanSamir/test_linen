@@ -142,10 +142,10 @@ def target_m_dqn(model, target_network, states, next_states, actions,rewards, te
   return jax.lax.stop_gradient(modified_bellman)
 
 
-@functools.partial(jax.jit, static_argnums=(0, 4, 5, 6, 7, 8, 10, 11, 12))
+@functools.partial(jax.jit, static_argnums=(0, 4, 5, 6, 7, 8, 10, 11))
 def select_action(network_def, params, state, rng, num_actions, eval_mode,
                   epsilon_eval, epsilon_train, epsilon_decay_period,
-                  training_steps, min_replay_history, epsilon_fn, tau, model):
+                  training_steps, min_replay_history, epsilon_fn):
 
   epsilon = jnp.where(eval_mode,
                       epsilon_eval,
@@ -403,9 +403,7 @@ class JaxDQNAgentNew(dqn_agent.JaxDQNAgent):
                                            self.epsilon_decay_period,
                                            self.training_steps,
                                            self.min_replay_history,
-                                           self.epsilon_fn,
-                                           self._tau,
-                                           self.optimizer)
+                                           self.epsilon_fn)
     self.action = onp.asarray(self.action)
     return self.action
 
@@ -437,8 +435,6 @@ class JaxDQNAgentNew(dqn_agent.JaxDQNAgent):
                                            self.epsilon_decay_period,
                                            self.training_steps,
                                            self.min_replay_history,
-                                           self.epsilon_fn,
-                                           self._tau,
-                                           self.optimizer)
+                                           self.epsilon_fn)
     self.action = onp.asarray(self.action)
     return self.action
