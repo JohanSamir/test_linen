@@ -218,7 +218,7 @@ class RainbowDQN(nn.Module):
       q_values = jnp.sum(support * probabilities, axis=2)
 
     else:
-      x = net(x, features=self.num_actions * self.num_atoms)
+      x = net(x, features=self.num_actions * self.num_atoms, rng=rng)
       logits = x.reshape((x.shape[0], self.num_actions, self.num_atoms))
       probabilities = nn.softmax(logits)
       q_values = jnp.sum(support * probabilities, axis=2)
