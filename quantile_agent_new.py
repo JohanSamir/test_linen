@@ -266,7 +266,6 @@ class JaxQuantileAgentNew(dqn_agent.JaxDQNAgent):
         observation_dtype=self.observation_dtype)
 
   def begin_episode(self, observation):
-
     self._reset_state()
     self._record_observation(observation)
 
@@ -277,7 +276,6 @@ class JaxQuantileAgentNew(dqn_agent.JaxDQNAgent):
                                            self.online_params,
                                            self.state,
                                            self._rng,
-                                           self.num_quantile_samples,
                                            self.num_actions,
                                            self.eval_mode,
                                            self.epsilon_eval,
@@ -290,7 +288,6 @@ class JaxQuantileAgentNew(dqn_agent.JaxDQNAgent):
     return self.action
 
   def step(self, reward, observation):
-    
     self._last_observation = self._observation
     self._record_observation(observation)
 
@@ -302,7 +299,6 @@ class JaxQuantileAgentNew(dqn_agent.JaxDQNAgent):
                                            self.online_params,
                                            self.state,
                                            self._rng,
-                                           self.num_quantile_samples,
                                            self.num_actions,
                                            self.eval_mode,
                                            self.epsilon_eval,

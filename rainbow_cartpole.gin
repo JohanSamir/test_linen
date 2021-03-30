@@ -18,15 +18,15 @@ JaxDQNAgent.update_period = 2
 JaxDQNAgent.target_update_period = 100
 
 JaxRainbowAgentNew.optimizer = 'adam'
-JaxRainbowAgentNew.noisy = False
-JaxRainbowAgentNew.dueling = False
+JaxRainbowAgentNew.noisy = True
+JaxRainbowAgentNew.dueling = True
 JaxRainbowAgentNew.initzer = @networks_new.variance_scaling_init()
 networks_new.variance_scaling_init.type=2
-networks_new.variance_scaling_init.scale=1#0.8
-networks_new.variance_scaling_init.mode='fan_avg'#'fan_in'
+networks_new.variance_scaling_init.scale=0.8
+networks_new.variance_scaling_init.mode='fan_in'
 networks_new.variance_scaling_init.distribution='uniform'
 
-JaxRainbowAgentNew.double_dqn = False
+JaxRainbowAgentNew.double_dqn = True
 JaxRainbowAgentNew.net_conf = 'classic'
 JaxRainbowAgentNew.env = 'CartPole'
 JaxRainbowAgentNew.normalize_obs = True

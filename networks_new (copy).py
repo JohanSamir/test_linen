@@ -48,20 +48,20 @@ class NoisyNetwork(nn.Module):
     # Initializer of \mu and \sigma 
    
     def mu_init(key, shape, rng):
-        low = -1*1/jnp.power(x.shape[-1], 0.5)
-        high = 1*1/jnp.power(x.shape[-1], 0.5)
+        low = -1*1/jnp.power(x.shape[1], 0.5)
+        high = 1*1/jnp.power(x.shape[1], 0.5)
         return jax.random.uniform(rng, shape=shape, minval=low, maxval=high)
 
-    def sigma_init(key, shape, dtype=jnp.float32): return jnp.ones(shape, dtype)*(0.1 / jnp.sqrt(x.shape[-1]))
+    def sigma_init(key, shape, dtype=jnp.float32): return jnp.ones(shape, dtype)*(0.1 / jnp.sqrt(x.shape[1]))
 
     rng, rng2, rng3, rng4, rng5 = jax.random.split(self.rng, 5)
     # Sample noise from gaussian
-    p = sample_noise(rng2,[x.shape[-1], 1])
+    p = sample_noise(rng2,[x.shape[1], 1])
     q = sample_noise(rng3,[1, self.features])
     f_p = f(p); f_q = f(q)
     w_epsilon = f_p*f_q; b_epsilon = jnp.squeeze(f_q)
-    w_mu = self.param('kernel', mu_init, (x.shape[-1], self.features), rng3)
-    w_sigma = self.param('kernell', sigma_init, (x.shape[-1], self.features))
+    w_mu = self.param('kernel', mu_init, (x.shape[1], self.features), rng3)
+    w_sigma = self.param('kernell', sigma_init, (x.shape[1], self.features))
     w = w_mu + jnp.multiply(w_sigma, w_epsilon)
     ret = jnp.matmul(x, w)
 
@@ -90,14 +90,16 @@ class DQNNetwork(nn.Module):
 
     if self.net_conf == 'minatar':
       x = x.squeeze(3)
+      x = x[None, ...]
       x = x.astype(jnp.float32)
       x = nn.Conv(features=16, kernel_size=(3, 3, 3), strides=(1, 1, 1),  kernel_init=self.initzer)(x)
       x = jax.nn.relu(x)
-      x = x.reshape((-1))
+      x = x.reshape((x.shape[0], -1))
 
     elif self.net_conf == 'atari':
       # We need to add a "batch dimension" as nn.Conv expects it, yet vmap will
       # have removed the true batch dimension.
+      x = x[None, ...]
       x = x.astype(jnp.float32) / 255.
       x = nn.Conv(features=32, kernel_size=(8, 8), strides=(4, 4),
                   kernel_init=self.initzer)(x)
@@ -108,14 +110,13 @@ class DQNNetwork(nn.Module):
       x = nn.Conv(features=64, kernel_size=(3, 3), strides=(1, 1),
                   kernel_init=self.initzer)(x)
       x = jax.nn.relu(x)
-      x = x.reshape((-1))  # flatten
+      x = x.reshape((x.shape[0], -1))  # flatten
 
     elif self.net_conf == 'classic':
       #classic environments
-      #print('x1:',x.shape)
+      x = x[None, ...]
       x = x.astype(jnp.float32)
-      x = x.reshape((-1))
-      #print('x2:',x.shape)
+      x = x.reshape((x.shape[0], -1))
 
     if self.env is not None and self.env in env_inf:
       x = x - env_inf[self.env]['MIN_VALS']
@@ -135,13 +136,10 @@ class DQNNetwork(nn.Module):
 
     adv = net(x, features=self.num_actions, rng=rng)
     val = net(x, features=1, rng=rng)
-    #print('adv:',adv.shape)
-    #print('val:',val.shape)
     dueling_q = val + (adv - (jnp.mean(adv, -1, keepdims=True)))
     non_dueling_q = net(x, features=self.num_actions, rng=rng)
 
     q_values = jnp.where(self.dueling, dueling_q, non_dueling_q)
-    #print('q_values:',q_values.shape)
 
     return atari_lib.DQNNetworkType(q_values)
 
@@ -166,14 +164,16 @@ class RainbowDQN(nn.Module):
 
     if self.net_conf == 'minatar':
       x = x.squeeze(3)
+      x = x[None, ...]
       x = x.astype(jnp.float32)
       x = nn.Conv(features=16, kernel_size=(3, 3, 3), strides=(1, 1, 1),  kernel_init=self.initzer)(x)
       x = jax.nn.relu(x)
-      x = x.reshape((-1))
+      x = x.reshape((x.shape[0], -1))
 
     elif self.net_conf == 'atari':
       # We need to add a "batch dimension" as nn.Conv expects it, yet vmap will
       # have removed the true batch dimension.
+      x = x[None, ...]
       x = x.astype(jnp.float32) / 255.
       x = nn.Conv(features=32, kernel_size=(8, 8), strides=(4, 4),
                   kernel_init=self.initzer)(x)
@@ -184,19 +184,13 @@ class RainbowDQN(nn.Module):
       x = nn.Conv(features=64, kernel_size=(3, 3), strides=(1, 1),
                   kernel_init=self.initzer)(x)
       x = jax.nn.relu(x)
-      #x = x.reshape((x.shape[0], -1))
-      x = x.reshape((-1))  # flatten
+      x = x.reshape((x.shape[0], -1))  # flatten
 
     elif self.net_conf == 'classic':
       #classic environments
-      #x = x[None, ...] #con NOne: 
+      x = x[None, ...]
       x = x.astype(jnp.float32)
-      #print('xshape:',x.shape) # [x.reshape((-1))]-> con None: xshape: (1, 4, 1, 1), sin None: xshape: (4, 1, 1)
-      # [x.reshape((x.shape[0], -1))]-> con (None: xshape: (1,4,1,1), sin None: xshape: (4,1,1))
-      x = x.reshape((-1))
-      #x = x.reshape((x.shape[0], -1))
-      #print('xshape:',x.shape) # [x.reshape((-1))]-> con (None: xshape: (4,), sin None: xshape: (4,))
-      # [x.reshape((x.shape[0], -1))]-> con (None: xshape: (1,4), sin None: xshape: (4,1))
+      x = x.reshape((x.shape[0], -1))
 
     if self.env is not None and self.env in env_inf:
       x = x - env_inf[self.env]['MIN_VALS']
@@ -215,28 +209,19 @@ class RainbowDQN(nn.Module):
       x = jax.nn.relu(x)
 
     if self.dueling:
-      #print('x2:',x.shape)
       adv = net(x,features=self.num_actions * self.num_atoms, rng=rng)
       value = net(x, features=self.num_atoms, rng=rng)
-      #print('adv1:',adv.shape)
-      #print('value1:',value.shape)
-      adv = adv.reshape((self.num_actions, self.num_atoms))
-      value = value.reshape((1, self.num_atoms))
-      #print('adv2:',adv.shape)
-      #print('value1:',value.shape)
+      adv = adv.reshape((adv.shape[0], self.num_actions, self.num_atoms))
+      value = value.reshape((value.shape[0], 1, self.num_atoms))
       logits = value + (adv - (jnp.mean(adv, -2, keepdims=True)))
       probabilities = nn.softmax(logits)
-      q_values = jnp.sum(support * probabilities, axis=1)
-      #print('q_values',q_values.shape)
+      q_values = jnp.sum(support * probabilities, axis=2)
 
     else:
-      #print('x',x.shape)
       x = net(x, features=self.num_actions * self.num_atoms, rng=rng)
-      logits = x.reshape((self.num_actions, self.num_atoms))
-      #print('probabilities',probabilities.shape)
+      logits = x.reshape((x.shape[0], self.num_actions, self.num_atoms))
       probabilities = nn.softmax(logits)
-      q_values = jnp.sum(support * probabilities, axis=1)
-      #print('q_values',q_values.shape)
+      q_values = jnp.sum(support * probabilities, axis=2)
 
     return atari_lib.RainbowNetworkType(q_values, logits, probabilities)
     
@@ -261,6 +246,7 @@ class QuantileNetwork(nn.Module):
 
     if self.net_conf == 'minatar':
       x = x.squeeze(3)
+      x = x[None, ...]
       x = x.astype(jnp.float32)
       x = nn.Conv(features=16, kernel_size=(3, 3, 3), strides=(1, 1, 1),  kernel_init=self.initzer)(x)
       x = jax.nn.relu(x)
@@ -269,6 +255,7 @@ class QuantileNetwork(nn.Module):
     elif self.net_conf == 'atari':
       # We need to add a "batch dimension" as nn.Conv expects it, yet vmap will
       # have removed the true batch dimension.
+      x = x[None, ...]
       x = x.astype(jnp.float32) / 255.
       x = nn.Conv(features=32, kernel_size=(8, 8), strides=(4, 4),
                   kernel_init=self.initzer)(x)
@@ -279,12 +266,13 @@ class QuantileNetwork(nn.Module):
       x = nn.Conv(features=64, kernel_size=(3, 3), strides=(1, 1),
                   kernel_init=self.initzer)(x)
       x = jax.nn.relu(x)
-      x = x.reshape((-1))  # flatten
+      x = x.reshape((x.shape[0], -1))  # flatten
 
     elif self.net_conf == 'classic':
       #classic environments
+      x = x[None, ...]
       x = x.astype(jnp.float32)
-      x = x.reshape((-1))
+      x = x.reshape((x.shape[0], -1))
 
     if self.env is not None and self.env in env_inf:
       x = x - env_inf[self.env]['MIN_VALS']
@@ -305,18 +293,17 @@ class QuantileNetwork(nn.Module):
     if self.dueling:
       adv = net(x,features=self.num_actions * self.num_atoms, rng=rng)
       value = net(x, features=self.num_atoms,  rng=rng)
-      adv = adv.reshape((self.num_actions, self.num_atoms))
-      value = value.reshape((1, self.num_atoms))
-      #print('value:', value.shape)
+      adv = adv.reshape((adv.shape[0], self.num_actions, self.num_atoms))
+      value = value.reshape((value.shape[0], 1, self.num_atoms))
       logits = value + (adv - (jnp.mean(adv, -2, keepdims=True)))
       probabilities = nn.softmax(logits)
-      q_values = jnp.mean(logits, axis=1)
+      q_values = jnp.mean(logits, axis=2)
 
     else:
       x = net(x, features=self.num_actions * self.num_atoms, rng=rng)
-      logits = x.reshape((self.num_actions, self.num_atoms))
+      logits = x.reshape((x.shape[0], self.num_actions, self.num_atoms))
       probabilities = nn.softmax(logits)
-      q_values = jnp.mean(logits, axis=1)
+      q_values = jnp.mean(logits, axis=2)
 
 
     return atari_lib.RainbowNetworkType(q_values, logits, probabilities)
@@ -340,6 +327,7 @@ class ImplicitQuantileNetwork(nn.Module):
 
     if self.net_conf == 'minatar':
       x = x.squeeze(3)
+      x = x[None, ...]
       x = x.astype(jnp.float32)
       x = nn.Conv(features=16, kernel_size=(3, 3, 3), strides=(1, 1, 1),  kernel_init=self.initzer)(x)
       x = jax.nn.relu(x)
@@ -348,6 +336,7 @@ class ImplicitQuantileNetwork(nn.Module):
     elif self.net_conf == 'atari':
       # We need to add a "batch dimension" as nn.Conv expects it, yet vmap will
       # have removed the true batch dimension.
+      x = x[None, ...]
       x = x.astype(jnp.float32) / 255.
       x = nn.Conv(features=32, kernel_size=(8, 8), strides=(4, 4),
                   kernel_init=self.initzer)(x)
@@ -358,14 +347,13 @@ class ImplicitQuantileNetwork(nn.Module):
       x = nn.Conv(features=64, kernel_size=(3, 3), strides=(1, 1),
                   kernel_init=self.initzer)(x)
       x = jax.nn.relu(x)
-      x = x.reshape((-1))  # flatten
+      x = x.reshape((x.shape[0], -1))  # flatten
 
     elif self.net_conf == 'classic':
       #classic environments
-      #print('x input',x.shape)
+      x = x[None, ...]
       x = x.astype(jnp.float32)
-      x = x.reshape((-1))
-      #print('x.shape:',x.shape)
+      x = x.reshape((x.shape[0], -1))
 
     if self.env is not None and self.env in env_inf:
       x = x - env_inf[self.env]['MIN_VALS']
@@ -398,10 +386,8 @@ class ImplicitQuantileNetwork(nn.Module):
     quantile_net = jax.nn.relu(quantile_net)
     x = state_net_tiled * quantile_net
     
-    #print('X_before_adv:', x.shape)
     adv = net(x,features=self.num_actions, rng=rng)
     val = net(x, features=1, rng=rng)
-    #print('value:', val.shape)
     dueling_q = val + (adv - (jnp.mean(adv, -1, keepdims=True)))
     non_dueling_q = net(x, features=self.num_actions, rng=rng)
     quantile_values = jnp.where(self.dueling, dueling_q, non_dueling_q)
