@@ -95,7 +95,7 @@ for seed in seeds:
 
               agent_name = agents[agent].__name__
               gin_bindings = [f"{agent_name}.seed=None"] if seed is False else [f"{agent_name}.seed={i}",
-                              f"JaxDQNAgentNew.initzer = @networks_new.variance_scaling_init()",
+                              f"{agent_name}.initzer = @networks_new.variance_scaling_init()",
                               f"networks_new.variance_scaling_init.type = {init}",
                               f"networks_new.variance_scaling_init.scale = {scale[j]}"
                               f"networks_new.variance_scaling_init.mode = {mode[j]}"
@@ -107,7 +107,7 @@ for seed in seeds:
 
             agent_name = agents[agent].__name__
             gin_bindings = [f"{agent_name}.seed=None"] if seed is False else [f"{agent_name}.seed={i}",
-                            f"JaxDQNAgentNew.initzer = @networks_new.variance_scaling_init()",
+                            f"{agent_name}.initzer = @networks_new.variance_scaling_init()",
                             f"networks_new.variance_scaling_init.type = {init}"]
 
 
