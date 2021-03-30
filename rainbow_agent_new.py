@@ -13,6 +13,7 @@ Details in "Rainbow: Combining Improvements in Deep Reinforcement Learning" by
 Hessel et al. (2018).
 """
 import copy
+import time
 import functools
 from dopamine.jax import networks
 from dopamine.jax.agents.dqn import dqn_agent
@@ -138,7 +139,8 @@ class JaxRainbowAgentNew(dqn_agent.JaxDQNAgent):
                replay_scheme='prioritized',
                optimizer='adam',
                network=networks.RainbowNetwork,
-               epsilon_fn=dqn_agent.linearly_decaying_epsilon):
+               epsilon_fn=dqn_agent.linearly_decaying_epsilon,
+               seed=None):
     """Initializes the agent and constructs the necessary components.
 
     Args:
@@ -179,6 +181,7 @@ class JaxRainbowAgentNew(dqn_agent.JaxDQNAgent):
     # We need this because some tools convert round floats into ints.
 
     vmax = float(vmax)
+    seed = int(time.time() * 1e6) if seed is None else seed
     self._num_atoms = num_atoms
     self._support = jnp.linspace(-vmax, vmax, num_atoms)
     self._replay_scheme = replay_scheme
@@ -191,6 +194,7 @@ class JaxRainbowAgentNew(dqn_agent.JaxDQNAgent):
     self._noisy = noisy
     self._dueling = dueling
     self._initzer = initzer
+    self._rng = jax.random.PRNGKey(seed)
 
     super(JaxRainbowAgentNew, self).__init__(
         num_actions=num_actions,

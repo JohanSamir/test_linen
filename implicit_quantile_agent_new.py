@@ -10,7 +10,7 @@ from __future__ import print_function
 
 import copy
 import functools
-
+import time
 from dopamine.jax import networks
 from dopamine.jax.agents.dqn import dqn_agent
 from dopamine.replay_memory import prioritized_replay_buffer 
@@ -303,7 +303,8 @@ class JaxImplicitQuantileAgentNew(dqn_agent.JaxDQNAgent):
                replay_scheme='prioritized',
                optimizer='adam',
                summary_writer=None,
-               summary_writing_frequency=500):
+               summary_writing_frequency=500,
+               seed=None):
     """Initializes the agent and constructs the necessary components.
 
     Most of this constructor's parameters are IQN-specific hyperparameters whose
@@ -352,7 +353,7 @@ class JaxImplicitQuantileAgentNew(dqn_agent.JaxDQNAgent):
         written. Lower values will result in slower training.
     """
     
-
+    seed = int(time.time() * 1e6) if seed is None else seed
     self._net_conf = net_conf
     self._env = env
     self._hidden_layer = hidden_layer
@@ -365,6 +366,7 @@ class JaxImplicitQuantileAgentNew(dqn_agent.JaxDQNAgent):
     self._alpha = alpha
     self._clip_value_min = clip_value_min
     self._target_opt = target_opt
+    self._rng = jax.random.PRNGKey(seed)
 
     self.kappa = kappa
     self._replay_scheme = replay_scheme
@@ -379,6 +381,7 @@ class JaxImplicitQuantileAgentNew(dqn_agent.JaxDQNAgent):
     self.quantile_embedding_dim = quantile_embedding_dim
     # option to perform double dqn.
     self.double_dqn = double_dqn
+
 
     super(JaxImplicitQuantileAgentNew, self).__init__(
         num_actions=num_actions,

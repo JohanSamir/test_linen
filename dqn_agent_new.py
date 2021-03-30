@@ -258,11 +258,6 @@ class JaxDQNAgentNew(dqn_agent.JaxDQNAgent):
 
     
     self._replay_scheme = replay_scheme
-    state_shape = self.observation_shape + (self.stack_size,)
-    self.state = onp.zeros(state_shape)
-    self._optimizer_name = optimizer
-    self._build_networks_and_optimizer()
-
 
   def _build_networks_and_optimizer(self):
     self._rng, rng = jax.random.split(self._rng)
