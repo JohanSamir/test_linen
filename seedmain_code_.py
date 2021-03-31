@@ -44,8 +44,8 @@ agents = {
 }
 
 inits = {
-    'zeros': jax.nn.initializers.zeros,
-    'ones': jax.nn.initializers.ones,
+    'zeros': {'function':jax.nn.initializers.zeros},
+    'ones': {'function':jax.nn.initializers.ones},
     'xavier': {'function':jax.nn.initializers.variance_scaling, 'scale':1, 'mode':'fan_avg', 'distribution':'uniform'},
     'variance_baseline':{'function':jax.nn.initializers.variance_scaling, 'scale':1.0/jnp.sqrt(3.0), 'mode':'fan_in', 'distribution':'uniform'},
     'variance_0.1':{'function':jax.nn.initializers.variance_scaling, 'scale':0.1, 'mode':'fan_in', 'distribution':'uniform'},
