@@ -1,11 +1,10 @@
 import dopamine.jax.agents.implicit_quantile.implicit_quantile_agent
 import dopamine.discrete_domains.run_experiment
 import dopamine.replay_memory.prioritized_replay_buffer
-
 import dopamine.jax.agents.dqn.dqn_agent
 import dopamine.jax.networks
 import dopamine.discrete_domains.gym_lib
-
+import external_configurations
 import networks_new
 import implicit_quantile_agent_new
 
@@ -26,11 +25,7 @@ JaxImplicitQuantileAgentNew.neurons = 512
 JaxImplicitQuantileAgentNew.noisy = False
 JaxImplicitQuantileAgentNew.double_dqn = False
 JaxImplicitQuantileAgentNew.dueling = False
-JaxImplicitQuantileAgentNew.initzer = @networks_new.variance_scaling_init()
-networks_new.variance_scaling_init.type=2
-networks_new.variance_scaling_init.scale=0.8
-networks_new.variance_scaling_init.mode='fan_in'
-networks_new.variance_scaling_init.distribution='uniform'
+JaxImplicitQuantileAgentNew.initzer = @variance_scaling #@variance_scaling #@zeros #@ones
 
 JaxImplicitQuantileAgentNew.replay_scheme = 'uniform' #'prioritized'
 JaxImplicitQuantileAgentNew.kappa = 1.0

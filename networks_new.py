@@ -20,15 +20,6 @@ env_inf = {"CartPole":{"MIN_VALS": onp.array([-2.4, -5., -math.pi/12., -math.pi*
             "MountainCar":{"MIN_VALS":onp.array([-1.2, -0.07]),"MAX_VALS": onp.array([0.6, 0.07])}
             }
 
-@gin.configurable
-def variance_scaling_init(type=0, scale=None, mode=None, distribution=None):
-    if type == 0:
-        return jax.nn.initializers.zeros
-    elif type == 1:
-        return jax.nn.initializers.ones
-    else:
-        return jax.nn.initializers.variance_scaling(scale, mode, distribution)
-
 #---------------------------------------------------------------------------------------------------------------------
 
 class NoisyNetwork(nn.Module):

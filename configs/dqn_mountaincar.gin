@@ -3,7 +3,7 @@ import dopamine.jax.networks
 import dopamine.discrete_domains.run_experiment
 import dopamine.jax.agents.dqn.dqn_agent
 import dopamine.replay_memory.prioritized_replay_buffer
-
+import external_configurations
 import networks_new
 import dqn_agent_new
 
@@ -28,11 +28,7 @@ JaxDQNAgentNew.target_opt = 0 #0:DQN 1:Double DQN 2:Munchausen DQN
 JaxDQNAgentNew.mse_inf = False
 JaxDQNAgentNew.noisy = False
 JaxDQNAgentNew.dueling = False
-JaxDQNAgentNew.initzer = @networks_new.variance_scaling_init()
-networks_new.variance_scaling_init.type=2
-networks_new.variance_scaling_init.scale=0.8
-networks_new.variance_scaling_init.mode='fan_in'
-networks_new.variance_scaling_init.distribution='uniform'
+JaxDQNAgentNew.initzer = @variance_scaling #@variance_scaling #@zeros #@ones
 
 JaxDQNAgentNew.network = @networks_new.DQNNetwork
 JaxDQNAgentNew.epsilon_fn = @dqn_agent.identity_epsilon
