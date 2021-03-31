@@ -7,19 +7,6 @@ Original file is located at
     https://colab.research.google.com/drive/1i-2Z2PJEZNST8Y4caTLwB9vTIcXE3I8Y
 """
 
-#You should delete the save files to run a new simulation. If this is not done this script will load the previous checkpoints and logs.
-
-#!pip install tensorflow --upgrade
-
-
-#!git clone https://github.com/kenjyoung/MinAtar.git
-#%cd MinAtar
-#!pip install .
-
-#!apt install swig
-#!pip install box2d box2d-kengz
-#!pip install dopamine-rl==3.1.9
-#!pip install dopamine-rl
 !pip install -U dopamine-rl
 
 import numpy as np
@@ -30,6 +17,7 @@ from dopamine.colab import utils as colab_utils
 from absl import flags
 import gin.tf
 import sys
+
 import matplotlib
 #matplotlib.use('TKAgg')
 
@@ -40,7 +28,6 @@ from google.colab import drive
 drive.mount('/content/drive')
 path = '/content/drive/My Drive/SaveFiles/Data/Dopamine_github/flax_linen/'
 sys.path.append(path)
-
 
 from dqn_agent_new import *
 from rainbow_agent_new import *
@@ -56,18 +43,19 @@ agents = {
     'implicit': JaxImplicitQuantileAgentNew,
 }
 
-inits ={
+inits = {
     'zeros': jax.nn.initializers.zeros,
     'ones': jax.nn.initializers.ones,
-    'xavier': jax.nn.initializers.variance_scaling(scale=1, mode='fan_avg', distribution='uniform'),
-    'variance_baseline': jax.nn.initializers.variance_scaling(scale=1.0/jnp.sqrt(3.0), mode='fan_in', distribution='uniform'),
-    'variance_0.1': jax.nn.initializers.variance_scaling(scale=0.1, mode='fan_in', distribution='uniform'),
-    'variance_0.3': jax.nn.initializers.variance_scaling(scale=0.3, mode='fan_in', distribution='uniform'),
-    'variance_0.8': jax.nn.initializers.variance_scaling(scale=0.8, mode='fan_in', distribution='uniform'),
-    'variance_1': jax.nn.initializers.variance_scaling(scale=1, mode='fan_in', distribution='uniform'),
-    'variance_2': jax.nn.initializers.variance_scaling(scale=2, mode='fan_in', distribution='uniform'),
-    'variance_5': jax.nn.initializers.variance_scaling(scale=5, mode='fan_in', distribution='uniform'),
-    'variance_10': jax.nn.initializers.variance_scaling(scale=10, mode='fan_in', distribution='uniform')}
+    'xavier': {'function':jax.nn.initializers.variance_scaling, 'scale':1, 'mode':'fan_avg', 'distribution':'uniform'},
+    'variance_baseline':{'function':jax.nn.initializers.variance_scaling, 'scale':1.0/jnp.sqrt(3.0), 'mode':'fan_in', 'distribution':'uniform'},
+    'variance_0.1':{'function':jax.nn.initializers.variance_scaling, 'scale':0.1, 'mode':'fan_in', 'distribution':'uniform'},
+    'variance_0.3':{'function':jax.nn.initializers.variance_scaling, 'scale':0.3, 'mode':'fan_in', 'distribution':'uniform'},
+    'variance_0.8':{'function':jax.nn.initializers.variance_scaling, 'scale':0.8, 'mode':'fan_in', 'distribution':'uniform'},
+    'variance_1':{'function':jax.nn.initializers.variance_scaling, 'scale':1, 'mode':'fan_in', 'distribution':'uniform'},
+    'variance_2':{'function':jax.nn.initializers.variance_scaling, 'scale':2, 'mode':'fan_in', 'distribution':'uniform'},
+    'variance_5':{'function':jax.nn.initializers.variance_scaling, 'scale':5, 'mode':'fan_in', 'distribution':'uniform'},
+    'variance_10':{'function':jax.nn.initializers.variance_scaling, 'scale':10, 'mode':'fan_in', 'distribution':'uniform'}
+}
 
 num_runs = 1
 environments = ['cartpole', 'acrobot']
@@ -85,16 +73,25 @@ for seed in seeds:
             return agents[agent](num_actions=environment.action_space.n)
 
           agent_name = agents[agent].__name__
-          initializer = inits[init].__name__
-          print('initializer',initializer)
+          initializer = inits[init]['function'].__name__
 
           LOG_PATH = os.path.join(f'{path}{seed}{i}_{agent}_{env}_{init}', f'dqn_test{i}')
           sys.path.append(path)    
           gin_file = f'{path}{agent}_{env}.gin'
 
-          gin_bindings = [f"{agent_name}.seed=None"] if seed is False else [f"{agent_name}.seed={i}",
-                          f"{agent_name}.initzer = @{initializer}"]
-          
+          if init == 'zeros' or init == 'ones':
+            gin_bindings = [f"{agent_name}.seed=None"] if seed is False else [f"{agent_name}.seed={i}",
+                            f"{agent_name}.initzer = @{initializer}"]
+          else:
+            mode = '"'+inits[init]['mode']+'"'
+            distribution = '"'+inits[init]['distribution']+'"'
+            gin_bindings = [f"{agent_name}.seed=None"] if seed is False else [f"{agent_name}.seed={i}",
+                            f"{agent_name}.initzer = @{initializer}",
+                            f"{initializer}.scale = 1",
+                            f"{initializer}.mode = {mode}",
+                            f"{initializer}.distribution = {distribution}"
+                            ]
+
           gin.clear_config()
           gin.parse_config_files_and_bindings([gin_file], gin_bindings, skip_unknown=False)
           agent_runner = run_experiment.TrainRunner(LOG_PATH, create_agent)
