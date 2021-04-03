@@ -14,7 +14,7 @@ JaxImplicitQuantileAgentNew.stack_size = %gym_lib.ACROBOT_STACK_SIZE
 JaxImplicitQuantileAgentNew.gamma = 0.99
 JaxImplicitQuantileAgentNew.update_horizon = 1#3
 JaxImplicitQuantileAgentNew.min_replay_history = 500 # agent steps
-JaxImplicitQuantileAgentNew.update_period = 2
+JaxImplicitQuantileAgentNew.update_period = 4
 JaxImplicitQuantileAgentNew.target_update_period = 100 # agent step
 
 
