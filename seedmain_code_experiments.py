@@ -63,7 +63,7 @@ for seed in seeds:
             mode = '"'+inits[init]['mode']+'"'
             distribution = '"'+inits[init]['distribution']+'"'
             gin_bindings = [f"{agent_name}.seed=None"] if seed is False else [f"{agent_name}.seed={i}",
-                            f"{agent_name}.initzer = @{initializer}",
+                            f"{agent_name}.initzer = @{initializer}()",
                             f"{initializer}.scale = 1",
                             f"{initializer}.mode = {mode}",
                             f"{initializer}.distribution = {distribution}"

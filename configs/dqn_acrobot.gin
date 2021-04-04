@@ -29,7 +29,10 @@ JaxDQNAgentNew.target_opt = 0 #0:DQN 1:Double DQN 2:Munchausen DQN
 JaxDQNAgentNew.mse_inf = False
 JaxDQNAgentNew.noisy = False
 JaxDQNAgentNew.dueling = False
-JaxDQNAgentNew.initzer = @variance_scaling
+JaxDQNAgentNew.initzer = @variance_scaling #variance_scaling()
+#variance_scaling.scale=0.1
+#variance_scaling.mode='fan_in'
+#variance_scaling.distribution='uniform'
 
 JaxDQNAgentNew.network = @networks_new.DQNNetwork
 JaxDQNAgentNew.epsilon_fn = @dqn_agent.identity_epsilon
